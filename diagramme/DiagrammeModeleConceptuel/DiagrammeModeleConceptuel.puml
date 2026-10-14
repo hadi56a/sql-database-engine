@@ -1,0 +1,128 @@
+@startuml
+
+
+title Modèle conceptuel du SGBD
+skinparam backgroundColor #FFFFFF
+skinparam shadowing true
+
+skinparam class {
+    BackgroundColor #FFFACD
+    BorderColor #DC143C
+    ArrowColor #DC143C
+    FontColor #000000
+}
+
+skinparam package {
+    BackgroundColor #F8F8F8
+    BorderColor #000000
+    FontColor #000000
+}
+rectangle "fr.insarouen.iti.prog.sgbd" as CADRE{
+    
+    class BaseDeDonnees {
+        tables : Liste<Table>
+        serialCounter : Entier
+    }
+
+    package "table" {
+
+
+        class Table {
+            nom : Cdc
+            attributs : Liste<Attribut>
+            lignes : Liste<Ligne>
+        }
+
+        class Attribut {
+            nom : Cdc
+            type : TypeAttribut
+        }
+
+        class Ligne {
+            valeurs : Dictionnaire<Attribut, Valeur>
+        }
+
+        class Alias {
+            alias : Cdc
+        }
+
+        enum TypeAttribut {
+            VARCHAR
+            SERIAL
+            INT
+        }
+    }
+
+    package "valeur" {
+
+        abstract class Valeur {
+            type : TypeAttribut
+        }
+
+        class ValeurVARCHAR {
+            donnee : Cdc
+        }
+
+        class ValeurINT {
+            donnee : Entier
+        }
+
+        class ValeurSERIAL {
+        }
+    }
+
+
+    package "condition" {
+
+        interface Condition {
+            estVerifiee(ligne : Ligne) : Booleen
+        }
+
+        class ConditionSimple {
+            partieGauche : Attribut
+            operateur : Operateur
+            partieDroite : Valeur / Attribut
+        }
+
+        class ConditionLogique {
+            condition1 : Condition
+            condition2 : Condition
+            logique : Logique
+        }
+
+        enum Operateur {
+            =
+            >
+            <
+        }
+
+        enum Logique {
+            ET
+            OU
+        }
+    }
+}
+
+BaseDeDonnees *-- "0..*" Table : contient
+Table *-- "1..*" Attribut : attributs
+Table *-- "0..*" Ligne : lignes
+Table <-- Alias : alias
+
+Ligne *-- "0..*" Valeur : valeurs
+Attribut --> TypeAttribut : type
+
+Valeur <|-- ValeurVARCHAR
+Valeur <|-- ValeurINT
+ValeurINT <|-- ValeurSERIAL
+
+Condition <|-- ConditionSimple
+Condition <|-- ConditionLogique
+
+ConditionSimple --> Attribut : partie gauche
+ConditionSimple --> Valeur : partie droite
+ConditionSimple --> Operateur : operateur
+
+ConditionLogique --> "2..*" Condition : conditions
+ConditionLogique --> Logique : logique
+
+@enduml

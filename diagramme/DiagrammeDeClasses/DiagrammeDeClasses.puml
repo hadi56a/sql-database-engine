@@ -1,0 +1,219 @@
+@startuml
+
+title Diagramme de classes principal du SGBD
+
+skinparam classAttributeIconSize 0
+skinparam backgroundColor #FFFFFF
+skinparam shadowing true
+
+skinparam class {
+    BackgroundColor #FFFACD
+    BorderColor #DC143C
+    ArrowColor #DC143C
+    FontColor #000000
+}
+
+skinparam package {
+    BackgroundColor #F8F8F8
+    BorderColor #000000
+    FontColor #000000
+}
+
+rectangle "fr.insarouen.iti.prog.sgbd" as CADRE  {
+
+  class BaseDeDonnees {
+      - tables : Set<Table>
+      - serialCounter : int
+
+      + BaseDeDonnees()
+      + createTable(nom : String, attributs : Set<Attribut>) : void
+      + dropTable(nom : String) : void
+      + getTable(nom : String) : Table
+      + getTables() : Set<Table>
+      + insert(valeursUtilisateur : Map<Attribut, Valeur>, table : Table) : void
+    }
+
+  package "condition" {
+
+    interface Condition {
+      + {abstract} estVerifiee(l : Ligne) : boolean
+    }
+
+    class ConditionSimple {
+      - partieGauche : Attribut
+      - partieDroiteAttribut : Attribut
+      - partieDroiteValeur : Valeur
+      - operateur : Operateur
+
+      + ConditionSimple(partieGauche : Attribut, partieDroite : Attribut, operateur : Operateur)
+      + ConditionSimple(partieGauche : Attribut, partieDroite : Valeur, operateur : Operateur)
+      + estVerifiee(l : Ligne) : boolean
+    }
+
+    class ConditionLogique {
+      - condition1 : Condition
+      - condition2 : Condition
+      - logique : Logique
+
+      + ConditionLogique(c1 : Condition, c2 : Condition, l : Logique)
+      + estVerifiee(l : Ligne) : boolean
+    }
+
+    enum Operateur {
+      EGAL
+      SUPERIEUR
+      INFERIEUR
+    }
+
+    enum Logique {
+      ET
+      OU
+    }
+  }
+
+  package "table" {
+
+
+
+    class Table {
+      - nom : String
+      - attributs : Set<Attribut>
+      - lignes : List<Ligne>
+
+      + Table(nom : String, attributs : Set<Attribut>)
+      + ajouterSuffixe(suffixe : String) : void
+      + getNom() : String
+      + getAttributs() : Collection<Attribut>
+      + getAttribut(nomRecherche : String) : Attribut
+      + select(condition : Condition) : Table
+      + select(attributs : Set<Attribut>, condition : Condition) : Table
+      + getLignes(): List<Ligne>
+      + insert(valeursUtilisateur : Map<Attribut, Valeur>) : void
+      + insertLigne(l : Ligne) : void
+      + delete() : int
+      + delete(condition : Condition) : int
+      + produitCartesien(table : Table) : Table
+      + equals(obj : Object) : boolean
+      + hashCode() : int
+      + toString() : String
+      - attributExiste(Attribut attr) : boolean
+    }
+
+    class Attribut <<record>> {
+      - prefixe : String
+      - nom : String
+      - type : TypeAttribut
+
+      + Attribut(nom : String, type : TypeAttribut)
+      + toString() : String
+    }
+
+    class Ligne {
+      - valeurs : Map<Attribut, Valeur>
+
+      + Ligne(valeurs : Map<Attribut, Valeur>)
+      + getValeur(attr : Attribut) : Valeur
+      + getValeurs() : Collection<Valeur>
+      + getLigne() : Map<Attribut, Valeur>
+    }
+
+    class Alias {
+      - table : Table
+      - alias : String
+
+      + Alias(table : Table, alias : String)
+      + getAlias() : String
+      + getTable() : Table
+      + getTableAvecPrefixe() : Table
+    }
+
+    enum TypeAttribut {
+      SERIAL
+      INT
+      VARCHAR
+    }
+  }
+
+  package "valeur" {
+
+    abstract class Valeur {
+      - type : TypeAttribut
+
+      + Valeur(type : TypeAttribut)
+      + {abstract} getType() : TypeAttribut
+      + {abstract} getValeur()
+    }
+
+    class ValeurVARCHAR {
+      - donnee : String
+
+      + ValeurVARCHAR(donnee : String)
+      + getType() : TypeAttribut
+      + getValeur() : String
+    }
+
+    class ValeurINT {
+      # donnee : Integer
+
+      + ValeurINT(donnee : Integer)
+      + getType() : TypeAttribut
+      + getValeur() : Integer
+    }
+
+    class ValeurSERIAL {
+      + ValeurSERIAL(donnee : Integer)
+      + getType() : TypeAttribut
+    }
+  }
+
+  package "data" {
+
+    class Enregistreur {
+      - oos : ObjectOutputStream
+
+      + Enregistreur(oos : ObjectOutputStream)
+      + enregistrer(bdd : BaseDeDonnees) : void
+    }
+
+    class Lecteur {
+      - bdd : BaseDeDonnees
+
+      + Lecteur(ois : ObjectInputStream)
+      + getBaseDeDonnees() : BaseDeDonnees
+    }
+  }
+
+}
+
+ConditionSimple --|> Condition
+ConditionLogique --|> Condition
+
+ValeurVARCHAR --|> Valeur
+ValeurINT --|> Valeur
+ValeurSERIAL --|> ValeurINT
+
+BaseDeDonnees "1" o-- "0..*" Table : contient
+
+Table "1" *-- "1..*" Attribut : attributs
+Table "1" *-- "0..*" Ligne : lignes
+Table ..> Condition : utilise
+
+Ligne "1" --> "0..*" Valeur : valeurs
+
+Alias --> Table : alias
+
+ConditionSimple --> Attribut : partieGauche
+ConditionSimple --> Attribut : partieDroiteAttribut
+ConditionSimple --> Valeur : partieDroiteValeur
+ConditionSimple --> Operateur
+
+ConditionLogique --> Logique
+ConditionLogique --> "2..*" Condition : conditions
+
+
+Attribut --> TypeAttribut
+Valeur --> TypeAttribut
+
+Lecteur --> "1" BaseDeDonnees
+
+@enduml

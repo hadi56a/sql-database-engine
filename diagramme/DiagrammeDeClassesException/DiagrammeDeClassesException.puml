@@ -1,0 +1,60 @@
+@startuml
+title Diagramme des exceptions du SGBD
+skinparam backgroundColor #FFFFFF
+skinparam shadowing true
+skinparam class {
+    BackgroundColor #FFFACD
+    BorderColor #DC143C
+    ArrowColor #DC143C
+    FontColor #000000
+}
+skinparam rectangle {
+    BorderColor #000000
+    BackgroundColor #FFFFFF
+}
+
+rectangle "fr.insarouen.iti.prog.sgbd.exception" as CADRE {
+    class Exception
+    class SgbdException {
+        +SgbdException(message : String)
+        +SgbdException(message : String, cause : Throwable)
+    }
+    class TableAlreadyExistsException {
+        +TableAlreadyExistsException(message : String)
+        +TableAlreadyExistsException(message : String, cause : Throwable)
+    }
+    class TableNotFoundException {
+        +TableNotFoundException(message : String)
+        +TableNotFoundException(message : String, cause : Throwable)
+    }
+    class TypeMismatchException {
+        +TypeMismatchException(message : String)
+        +TypeMismatchException(message : String, cause : Throwable)
+    }
+    class SqlException {
+        +SqlException(message : String)
+        +SqlException(message : String, cause : Throwable)
+    }
+    class AttributNotFoundException {
+        +AttributNotFoundException(message : String)
+        +AttributNotFoundException(message : String, cause : Throwable)
+    }
+    class NumberValuesAndAttributsException {
+        +NumberValuesAndAttributsException(message : String)
+        +NumberValuesAndAttributsException(message : String, cause : Throwable)
+    }
+    class ExitException {
+        +ExitException()
+    }
+    Exception <|-- SgbdException
+    Exception <|-- RuntimeException
+    Exception <|-- SqlException
+    SgbdException <|-- TableAlreadyExistsException
+    SgbdException <|-- TableNotFoundException
+    SgbdException <|-- TypeMismatchException
+    SqlException <|-- AttributNotFoundException
+    SqlException <|-- NumberValuesAndAttributsException
+    RuntimeException <|-- ExitException
+
+}
+@enduml
