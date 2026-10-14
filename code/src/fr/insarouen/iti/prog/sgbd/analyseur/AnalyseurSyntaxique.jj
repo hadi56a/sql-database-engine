@@ -1,0 +1,506 @@
+options {
+    LOOKAHEAD = 1;
+    CHOICE_AMBIGUITY_CHECK = 1;
+    OTHER_AMBIGUITY_CHECK = 1;
+    STATIC = false;
+    DEBUG_PARSER = false;
+    DEBUG_LOOKAHEAD = false;
+    DEBUG_TOKEN_MANAGER = false;
+    ERROR_REPORTING = true;
+    JAVA_UNICODE_ESCAPE = false;
+    UNICODE_INPUT = false;
+    IGNORE_CASE = true;
+    USER_TOKEN_MANAGER = false;
+    USER_CHAR_STREAM = false;
+    BUILD_PARSER = true;
+    BUILD_TOKEN_MANAGER = true;
+    SANITY_CHECK = true;
+    FORCE_LA_CHECK = true;
+}
+
+PARSER_BEGIN(AnalyseurSyntaxique)
+package fr.insarouen.iti.prog.sgbd.analyseur;
+
+import java.util.List;
+import java.util.Set;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.ArrayList;
+
+import fr.insarouen.iti.prog.sgbd.*;
+import fr.insarouen.iti.prog.sgbd.exception.*;
+
+import fr.insarouen.iti.prog.sgbd.table.*;
+import fr.insarouen.iti.prog.sgbd.valeur.*;
+import fr.insarouen.iti.prog.sgbd.condition.*;
+
+public class AnalyseurSyntaxique {}
+PARSER_END(AnalyseurSyntaxique)
+
+SKIP : {
+      " "
+    | "\t"
+    | "\r"
+    | "\n"
+    | < "--" (~["\r", "\n"])* >
+}
+
+TOKEN:{ 
+    <EGALE:"="> 
+    | <SUP: ">"> 
+    | <INF:"<"> 
+    | <PARENG:"("> 
+    | <PAREND:")"> 
+    | <POINT_VIRGULE:";">
+    | <VIRGULE:",">
+    | <AND:"AND">
+    | <OR:"OR">
+    | <INSERT_INTO:"INSERT INTO">
+    | <VALUES:"VALUES">
+    | <SELECT:"SELECT">
+    | <FROM:"FROM">
+    | <WHERE:"WHERE">
+    | <CREATE_TABLE:"CREATE TABLE">
+    | <DROP_TABLE:"DROP TABLE">
+    | <DELETE_FROM:"DELETE FROM">
+    | <TABLES:"TABLES">
+    | <EXIT:("EXIT" | "QUIT")>
+    | <AS:"AS">
+    | <TYPE: ("INT" | "SERIAL" | "VARCHAR")>
+    | <NUMBER: (["1"-"9"](["0"-"9"])* | "0")>
+    | <STRING: "\""(~["\""])*"\"">
+    | <STAR:"*">
+    | <ID:["a"-"z","A"-"Z","_"](["a"-"z","A"-"Z","_",".","0"-"9"])*>
+}
+
+
+
+//@start:programme
+void programme(BaseDeDonnees bdd) throws TypeMismatchException, TableNotFoundException, TableAlreadyExistsException:
+{}
+{
+    {
+        System.out.println("-----------------------");
+        System.out.println("Student Gotham Bat Database v19.39 - Connecté à mabase");
+        System.out.println("Tapez vos commandes SQL terminées par ';' (ou 'exit;' pour quitter)");
+    }
+    (   
+        try {
+            commande(bdd)
+        } catch (Exception e) {
+            if (e instanceof ExitException) throw (ExitException) e;
+            if (e instanceof fr.insarouen.iti.prog.sgbd.exception.SgbdException || e instanceof SqlException) {
+                System.err.println("> Erreur: " + e.getMessage());
+            } else if (e.getMessage() != null && e.getMessage().contains("EOF")) {
+                System.err.println("> Erreur: Vous avez oublié le ;");
+            } else {
+                System.err.println("> Erreur: Syntaxe SQL invalide");
+            }
+            // Récupération après erreur : ignore les tokens jusqu'au prochain point-virgule
+            Token t;
+            while ((t = getNextToken()).kind != POINT_VIRGULE && t.kind != EOF) {
+            }
+        }
+    )*
+    <EOF>
+}
+//@end:programme
+
+//@start:commande
+void commande(BaseDeDonnees bdd) throws TypeMismatchException, TableNotFoundException, TableAlreadyExistsException:
+{}
+{
+    (
+        commandeCreate(bdd)
+      | commandeInsert(bdd)
+      | commandeSelect(bdd)
+      | commandeDrop(bdd)
+      | commandeDelete(bdd)
+      | commandeTables(bdd)
+      | commandeExit()
+    )
+    <POINT_VIRGULE>
+}
+//@end:commande
+
+
+//commandeCreate ::= "CREATE TABLE" ID "(" attribut ("," attribut)* ")"
+
+void commandeCreate(BaseDeDonnees bdd) throws TableAlreadyExistsException:
+{
+    Token nomTable;
+    Set<Attribut> attributs;
+}
+{
+    <CREATE_TABLE> nomTable = <ID> <PARENG> attributs = listeAttributs() <PAREND>
+    {
+        try {
+            bdd.createTable(nomTable.image, attributs);
+            System.out.println("> Table " + nomTable.image + " créée.");
+        } catch (TableAlreadyExistsException e) {
+            System.err.println("> Erreur: " + e.getMessage());
+        }
+    }
+}
+
+//commandeDrop ::= "DROP TABLE" ID
+ 
+void commandeDrop(BaseDeDonnees bdd) throws TableNotFoundException:
+{
+    Token nomTable;
+}
+{
+    <DROP_TABLE> nomTable = <ID>
+    {   
+        try {
+            bdd.dropTable(nomTable.image);
+            System.out.println("> Table " + nomTable.image + " supprimée.");
+        } catch (TableNotFoundException e) {
+            System.err.println("> Erreur: " + e.getMessage());
+        }
+    }
+}
+
+//commandeInsert ::= "INSERT INTO" ID "(" ID ("," ID)* ")" "VALUES" "(" valeur ("," valeur)* ")"
+void commandeInsert(BaseDeDonnees bdd) throws TypeMismatchException, TableNotFoundException:
+{
+    Token nomTable;
+    Token nomAttribut;
+    List<String> nomsAttributs = new ArrayList<String>();
+    List<Valeur> valeurs = new ArrayList<Valeur>();
+    Map<Attribut, Valeur<?>> valeursMap = new HashMap<Attribut, Valeur<?>>();
+    Valeur valeurActuelle;
+}
+{
+    <INSERT_INTO> nomTable = <ID>
+    <PARENG>
+        nomAttribut = <ID> { nomsAttributs.add(nomAttribut.image); }
+        (
+            <VIRGULE> nomAttribut = <ID> { nomsAttributs.add(nomAttribut.image); }
+        )*
+    <PAREND>
+    <VALUES>
+    <PARENG>
+        valeurActuelle = valeur() { valeurs.add(valeurActuelle); }
+        (
+            <VIRGULE> valeurActuelle = valeur() { valeurs.add(valeurActuelle); }
+        )*
+    <PAREND>
+    {
+        Table table = bdd.getTable(nomTable.image);
+        if (table == null) {
+            throw new TableNotFoundException("Table inconnue : " + nomTable.image);
+        }
+
+        if (nomsAttributs.size() != valeurs.size()) {
+            throw new NumberValuesAndAttributsException(String.format("Erreur: Le nombre de colonnes" + 
+            "(%d) ne correspond pas au nombre de valeurs insérées (%d)", nomsAttributs.size(), valeurs.size()));
+        }
+
+        for (int i=0; i < nomsAttributs.size(); i++){
+            Attribut attr = table.getAttribut(nomsAttributs.get(i));
+            if (attr == null) {
+                throw new AttributNotFoundException("Colonne inconnue : " + nomsAttributs.get(i));
+            }
+            valeursMap.put(attr, valeurs.get(i));
+        }
+        try {
+            bdd.insert(valeursMap, table);
+            System.out.println("> 1 ligne insérée dans " + nomTable.image);
+        } catch (TypeMismatchException e) {
+            System.err.println("> Erreur: " + e.getMessage());
+        }
+        ;
+    }
+}
+//commandeDelete ::= "DELETE FROM" ID ["WHERE" condition]
+
+void commandeDelete(BaseDeDonnees bdd) throws TypeMismatchException, TableNotFoundException:
+{
+    Token nomTable;
+    Condition cond = null;
+    Table table;
+}
+{
+    <DELETE_FROM> nomTable = <ID>
+    {
+        table = bdd.getTable(nomTable.image);
+        if (table == null) {
+            throw new TableNotFoundException("Table inconnue : " + nomTable.image);
+        }
+    }
+    [<WHERE> cond = condition(table)]
+    {
+        try {
+            int count;
+            if(cond == null){
+                count = table.delete();
+            } else {
+                count = table.delete(cond);
+            }
+            System.out.println("> " + count + " ligne(s) supprimée(s) de " + nomTable.image);
+        } catch (TypeMismatchException e){
+            System.err.println("> Erreur: " + e.getMessage());
+        }
+        
+    }
+}
+
+/**
+ * commandeSelect ::= "SELECT" ("*" | ID ("," ID)*)
+ *                    "FROM" source ("," source)*
+ *                    ["WHERE" condition]
+ */
+
+void commandeSelect(BaseDeDonnees bdd) throws TypeMismatchException, TableNotFoundException:
+{
+    Token nomAttribut;
+    Table tableResultat;
+    List<String> nomsAttributs = new ArrayList<String>();
+    Alias sourceActuelle;
+    List<Alias> sources = new ArrayList<Alias>();
+    Condition cond = null;
+}
+{
+    <SELECT>
+    (
+        <STAR>
+        |nomAttribut = <ID> { nomsAttributs.add(nomAttribut.image); }
+        (<VIRGULE> nomAttribut = <ID> { nomsAttributs.add(nomAttribut.image); })*
+    )
+    <FROM>
+    sourceActuelle = source(bdd) { sources.add(sourceActuelle); }
+    (<VIRGULE> sourceActuelle = source(bdd) { sources.add(sourceActuelle); })*
+    {
+        if (sources.size() == 1) {
+            tableResultat = sources.get(0).getTable();
+        } else {
+            tableResultat = sources.get(0).getTableAvecPrefixe();
+            for (int i = 1; i < sources.size(); i++) {
+                tableResultat = tableResultat.produitCartesien(sources.get(i).getTableAvecPrefixe());
+            }
+        }
+    }
+    [<WHERE>cond=condition(tableResultat)]
+    {
+        // Récupération des attributs voulus
+        Set<Attribut> attributsVoulus = new LinkedHashSet<Attribut>();
+        if (!nomsAttributs.isEmpty()) {
+            for (String nomAttr : nomsAttributs) {
+                Attribut a = tableResultat.getAttribut(nomAttr);
+                if (a == null) {
+                    throw new AttributNotFoundException(String.format("Colonne inconnue lors du SELECT : %s", nomAttr));
+                }
+                attributsVoulus.add(a);
+            }
+        }
+        else {
+            attributsVoulus.addAll(tableResultat.getAttributs());
+        }
+        // Select avec condition et projection
+        try {
+            Table resultat = tableResultat.select(attributsVoulus, cond, sources.size() > 1, !nomsAttributs.isEmpty());
+            System.out.print(resultat);
+        } catch (TypeMismatchException e) {
+            System.err.println("> Erreur de type dans la requête : " + e.getMessage());
+        }
+    }
+}
+
+//source ::= ID [["AS"] ID]
+ 
+Alias source(BaseDeDonnees bdd) throws TableNotFoundException:
+{
+    Token nomTable;
+    Token nomAlias = null;
+    Table table;
+}
+{
+    nomTable = <ID>
+    [ [<AS>] nomAlias = <ID> ]
+    {
+        table = bdd.getTable(nomTable.image);
+
+        if (table == null) {
+            throw new TableNotFoundException("Table inconnue : " + nomTable.image);
+        }
+
+        if (nomAlias == null) {
+            return new Alias(table, nomTable.image);
+        }
+        return new Alias(table, nomAlias.image);
+    }
+}
+
+//commandeTables ::= "TABLES"
+ 
+void commandeTables(BaseDeDonnees bdd) :
+{}
+{
+    <TABLES>
+    {   
+        Set<Table> tables = (HashSet<Table>)bdd.getTables();
+        if(!tables.isEmpty()){
+            System.out.println("> Tables disponibles :");
+            for (Table table: tables) {
+                System.out.println(String.format("- %s", table.getNom()));
+            }
+        }else{
+            System.out.println("Aucune Table dans la base ");
+        }
+    }
+}
+
+//commandeExit ::= "EXIT" | "QUIT"
+ 
+void commandeExit() :
+{}
+{
+    <EXIT>
+    {  
+        throw new ExitException();
+    }
+}
+
+//type ::= INT | SERIAL | VARCHAR
+ 
+TypeAttribut type() :
+{
+    TypeAttribut res;
+    Token tokenType;
+}
+{
+    tokenType = <TYPE>
+    {
+        switch (tokenType.image.toUpperCase()) {
+            case "INT":
+                res = TypeAttribut.INT;
+                break;
+            case "SERIAL":
+                res = TypeAttribut.SERIAL;
+                break;
+            case "VARCHAR":
+                res = TypeAttribut.VARCHAR;
+                break;
+            default:
+                throw new RuntimeException("Type inconnu : " + tokenType.image);
+        }
+        return res;
+    }
+}
+
+//attribut ::= ID TYPE
+ 
+Attribut attribut() :
+{
+    Token nomAttribut;
+    TypeAttribut typeAttribut;
+}
+{
+    nomAttribut = <ID> typeAttribut = type()
+    {
+        return new Attribut(nomAttribut.image, typeAttribut);
+    }
+}
+
+//listeAttributs ::= attribut ("," attribut)*
+ 
+Set<Attribut> listeAttributs() :
+{
+    Set<Attribut> attributs = new LinkedHashSet<Attribut>();
+    Attribut attr;
+}
+{
+
+    attr = attribut() { attributs.add(attr); }
+    (
+        <VIRGULE> attr = attribut() { attributs.add(attr); }
+    )*
+    {
+        return attributs;
+    }
+}
+
+//valeur ::= NUMBER | STRING
+ 
+Valeur valeur() :
+{
+    Valeur res = null;
+    Token token;
+}
+{
+    (
+        token = <NUMBER>{ res = new ValeurINT(Integer.parseInt(token.image)); }
+        |token = <STRING>{ res = new ValeurVARCHAR(token.image.substring(1,token.image.length()-1)); }
+    )
+    {
+        return res;
+    }
+}
+
+// conditionSimple ::= ID ("=" | ">" | "<") (valeur | ID)
+ 
+ConditionSimple conditionSimple(Table tableCourante) throws TypeMismatchException:
+{
+    Token partieGauche;
+    Token partieDroiteAttribut;
+    Valeur partieDroiteValeur;
+    Operateur operateur;
+    Attribut aGauche;
+    ConditionSimple res = null;
+}
+{
+    partieGauche = <ID>
+    (
+        <EGALE> { operateur = Operateur.EGAL; }
+      | <SUP>   { operateur = Operateur.SUPERIEUR; }
+      | <INF>   { operateur = Operateur.INFERIEUR; }
+    )
+    (
+        partieDroiteValeur = valeur() { 
+            aGauche = tableCourante.getAttribut(partieGauche.image);
+            if (aGauche == null) {
+                throw new AttributNotFoundException("Attribut inconnu : " + partieGauche.image);
+            }
+            res = new ConditionSimple(aGauche, partieDroiteValeur, operateur); 
+        }
+        |
+        partieDroiteAttribut = <ID> { 
+            aGauche = tableCourante.getAttribut(partieGauche.image);
+            Attribut aDroite = tableCourante.getAttribut(partieDroiteAttribut.image);
+            if (aGauche == null || aDroite == null) {
+                String manquant = (aGauche == null) ? partieGauche.image : partieDroiteAttribut.image;
+                throw new AttributNotFoundException("Attribut inconnu : " + manquant);
+            }
+            res = new ConditionSimple(aGauche, aDroite, operateur); 
+        }
+    )
+    {
+        return res;
+    }
+}
+
+// condition ::= conditionSimple (("AND" | "OR") conditionSimple)*
+ 
+Condition condition(Table tableCourante) throws TypeMismatchException:
+{
+    Condition gauche;
+    Condition droite;
+    Logique logique;
+}
+{
+    gauche = conditionSimple(tableCourante)
+    (
+        (
+            <AND> { logique = Logique.ET; }
+          | <OR>  { logique = Logique.OU; }
+        )
+        droite = conditionSimple(tableCourante)
+        { gauche = new ConditionLogique(gauche, droite, logique); }
+    )*
+    {
+        return gauche;
+    }
+}
